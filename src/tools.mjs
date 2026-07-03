@@ -3,7 +3,7 @@
  * restrict to read-only commands for safety.
  * @satisfies {string[]}
  */
-const ALLOWED_COMMANDS = /** @type {const} */ ([
+export const ALLOWED_COMMANDS = /** @type {const} */ ([
   "cat",
   "head",
   "tail",
@@ -36,7 +36,7 @@ const ALLOWED_COMMANDS = /** @type {const} */ ([
  * @satisfies {string[]}
  * Commands that are explicitly forbidden.
  */
-const BLOCKED_COMMANDS = /** @type {const} */ ([
+export const BLOCKED_COMMANDS = /** @type {const} */ ([
   "rm",
   "mv",
   "cp",
