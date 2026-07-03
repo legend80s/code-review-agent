@@ -5,8 +5,6 @@ set -x
 
 pnpm init --init-type module --init-package-manager && git init && tsgo --init --types=node --checkJs=true && pnpm install -D @types/node && biome init && echo node_modules/ > .gitignore
 
-# node ./modify-node-js-app.ts
-
 # modify package.json to include "scripts":
 # "typecheck": "tsgo --noEmit",
 # "test": "node --test",
