@@ -10,16 +10,20 @@
 	},
 	"formatter": {
 		"enabled": true,
-		"indentStyle": "tab"
+		"indentStyle": "space"
 	},
 	"linter": {
 		"enabled": true,
 		"rules": {
+			"style": {
+				"useBlockStatements": "warn"
+			},
 			"recommended": true
 		}
 	},
 	"javascript": {
 		"formatter": {
+			"semicolons": "asNeeded",
 			"quoteStyle": "double"
 		}
 	},
