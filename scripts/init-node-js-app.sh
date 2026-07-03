@@ -22,3 +22,5 @@ npm pkg set scripts.typecheck="tsgo --noEmit" \
   scripts.pub:major="npm version major" \
   scripts.preversion="npm test && npm run typecheck" \
   scripts.postversion="npm publish && git push && git push --tags"
+
+node ./modify.mjs

@@ -15,16 +15,16 @@
 	"linter": {
 		"enabled": true,
 		"rules": {
+			"recommended": true,
 			"style": {
 				"useBlockStatements": "warn"
-			},
-			"recommended": true
+			}
 		}
 	},
 	"javascript": {
 		"formatter": {
-			"semicolons": "asNeeded",
-			"quoteStyle": "double"
+			"quoteStyle": "double",
+			"semicolons": "asNeeded"
 		}
 	},
 	"assist": {

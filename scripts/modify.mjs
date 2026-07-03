@@ -1,8 +1,8 @@
 // @ts-check
-import { writeFileSync } from "node:fs"
-import biomeJson from "../biome.json" with { type: "json" }
+import { readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import biomeJson from "../biome.json" with { type: "json" }
 
 function main() {
   modifyBiome()
@@ -49,15 +49,19 @@ function modifyBiome() {
     return
   }
 
+  // console.log("updatedMsgs:", updatedMsgs);
+
   console.log(
     "Updated biome.json with",
     updatedMsgs.length,
-    "changes:\n",
-    updatedMsgs.map((msg) => `  — ${msg}`).join("\n"),
+    `changes:
+${updatedMsgs.map((msg) => `— ${msg}`).join("\n")}`,
   )
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url))
   const biomeJsonPath = path.resolve(__dirname, "../biome.json")
 
-  writeFileSync(biomeJsonPath, JSON.stringify(biomeJson, null, 2))
+  const indent = readFileSync(biomeJsonPath).includes("\t") ? "\t" : 2
+
+  writeFileSync(biomeJsonPath, `${JSON.stringify(biomeJson, null, indent)}\n`)
 }
