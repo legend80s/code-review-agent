@@ -39,7 +39,7 @@ class ReviewReport {
   }
 
   to_markdown() {
-    return `Files reviewed: ${this.files_reviewed}\nFindings: ${this.findings.length}\nDuration: ${this.duration_ms}ms`
+    return `- Files reviewed: ${this.files_reviewed}\n- Findings: ${this.findings.length}\n- Duration: ${this.duration_ms}ms`
   }
 
   to_json() {
@@ -190,7 +190,7 @@ export async function run_review(diff_path, config, llm) {
   const duration_ms = Date.now() - start
 
   return Ok(
-    /** @type {ReviewReport} */ ({
+    new ReviewReport({
       files_reviewed,
       files_skipped: files_skipped + files_failed,
       total_tokens_used: total_usage.total(),

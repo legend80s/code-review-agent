@@ -80,6 +80,8 @@ async function main() {
   // Run the agent loop
   const report = (await agent.run_review(diff_path, config, backend)).unwrap()
 
+  // console.log("report:", report)
+
   info("review_completed:", { summary: report.summary_line() })
 
   // Format and output
@@ -107,7 +109,7 @@ async function main() {
     }
   })()
 
-  console.log(`${output}`)
+  console.log(`output in ${cli.output_format}:\n${output}`)
 }
 
 main()

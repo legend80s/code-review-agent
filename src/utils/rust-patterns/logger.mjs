@@ -15,18 +15,13 @@ export function info(...args) {
     if (isPlainObject(arg)) {
       // to key: value format
       for (const [key, value] of Object.entries(arg)) {
-        process.stdout.write(
-          `${key}=${styleText(
-            "green",
-            // @ts-expect-error
-            value,
-          )} `,
-        )
+        process.stdout.write(`${key}=${styleText("green", String(value))} `)
       }
     } else {
       process.stdout.write(arg + suffix)
     }
   }
+  console.log()
   // console.info(...args)
 }
 
