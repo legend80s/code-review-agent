@@ -74,7 +74,7 @@ export class CircuitBreaker {
    * @param {u32} max_failures
    * @returns
    */
-  new(max_failures) {
+  static new(max_failures) {
     return new CircuitBreaker(Math.max(1, max_failures), 0)
   }
 

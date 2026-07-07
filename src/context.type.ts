@@ -10,16 +10,9 @@ export type ContextBudget = {
   usedTokens: usize
 }
 
-/// A parsed unified diff broken into per-file chunks.
-// #[derive(Debug, Clone)]
-export type DiffContext = {
-  /// Per-file change records.
-  files: Array<FileChange>
-}
-
 /// A single file's diff content.
 // #[derive(Debug, Clone)]
-export type FileChange = {
+export type IFileChange = {
   /// File path (relative).
   path: string
   /// The raw unified diff text for this file.

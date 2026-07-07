@@ -1,4 +1,24 @@
 // examples/code-review-agent/src/tools.rs — 工具安全约束
+
+export class ToolConfig {
+  /** @param {import('./tools.type.js').IToolConfig} parameters  */
+  constructor(parameters) {
+    Object.assign(this, parameters)
+  }
+
+  /**
+   *
+   * @returns {import('./tools.type.js').IToolConfig}
+   */
+  static default() {
+    return {
+      cwd: null,
+      max_output_bytes: 50_000,
+      timeout_secs: 30,
+    }
+  }
+}
+
 /**
  * restrict to read-only commands for safety.
  * @satisfies {string[]}

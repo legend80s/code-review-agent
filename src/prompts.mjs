@@ -1,4 +1,28 @@
-/** @import { PrInfo } from './type.js' */
+/** @import { IPrInfo } from './prompts.type.js' */
+
+import { DiffContext } from "./context.mjs"
+
+// biome-ignore lint/complexity/noStaticOnlyClass: <explanation>
+export class PrInfo {
+  /**
+   * Construct `PrInfo` from a parsed diff context.
+   * @param {DiffContext} diff
+   * @returns {IPrInfo}
+   */
+  static from_diff_context(diff) {
+    /** @type {string[]} */
+    const changedFiles = diff.files.map((f) => f.path)
+    const title =
+      changedFiles.length === 1
+        ? `Review changes in ${changedFiles[0]}`
+        : `Review changes across ${changedFiles.length} files`
+
+    return {
+      title,
+      changedFiles,
+    }
+  }
+}
 
 /**
  *  Build the full system prompt from PR metadata.
@@ -6,7 +30,7 @@
  * The prompt has two sections:
  * 1. **Constitution** (static): review principles, severity definitions, output format spec.
  * 2. **Runtime** (dynamic): PR title, changed file list, inferred language rules.
- * @param {PrInfo} pr_info
+ * @param {IPrInfo} pr_info
  * @returns {string}
  */
 export function build_system_prompt(pr_info) {
@@ -37,7 +61,7 @@ You MUST output a JSON array of finding objects...`
 
 /**
  * Dynamic runtime section: PR metadata and language-specific hints.
- * @param {PrInfo} pr_info
+ * @param {IPrInfo} pr_info
  * @returns {string}
  */
 function build_runtime_section(pr_info) {

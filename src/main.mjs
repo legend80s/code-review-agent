@@ -1,6 +1,13 @@
 import { parseArgs } from "node:util"
 
-function main(params) {
+import * as agent from "./agent.mjs"
+import { OutputFormat } from "./cli.mjs"
+import { CcSdkBackend } from "./llm.mjs"
+import { info } from "./utils/rust-patterns/logger.mjs"
+
+// Usage node src/main.mjs --diff /tmp/new-code-review.diff
+
+async function main() {
   const { values } = parseArgs({
     options: {
       diff: {
@@ -40,43 +47,67 @@ function main(params) {
       throw new TypeError("--diff is required in CLI mode")
     })()
 
-  info("review_started  ", {
+  info("review_started:", {
     diff: cli.diff,
     max_tokens: cli.max_tokens,
     max_file_tokens: cli.max_file_tokens,
     // backend: ?cli.backend,
     output_format: cli.output_format,
   })
+  // return
+
+  /**
+   * @type {import('./cli.type.js').ICliOptions}
+   */
+  const cliOptions = {
+    ...values,
+    max_tokens: Number(cli.max_tokens),
+    max_file_tokens: Number(cli.max_file_tokens),
+    output_format: cli.output_format === "json" ? "json" : "markdown",
+  }
+
+  /**
+   * @type {import('./agent.type.js').IReviewConfig}
+   */
+  const config = {
+    ...agent.ReviewConfig.default(),
+    max_tokens: cliOptions.max_tokens,
+    max_file_tokens: cliOptions.max_file_tokens,
+  }
+
+  const backend = new CcSdkBackend()
+
+  // Run the agent loop
+  const report = (await agent.run_review(diff_path, config, backend)).unwrap()
+
+  info("review_completed:", { summary: report.summary_line() })
+
+  // Format and output
+  // switch (key) {
+  //   case value:
+  //     break
+
+  //   default:
+  //     break
+  // }
+  /** @type {string} */
+  const output = (() => {
+    switch (cli.output_format) {
+      case OutputFormat.Markdown: {
+        return report.to_markdown()
+      }
+
+      case OutputFormat.Json: {
+        return report.to_json().context("Failed to serialize report").unwrap()
+      }
+
+      default: {
+        throw new Error(`Unknown output format: ${cli.output_format}`)
+      }
+    }
+  })()
+
+  console.log(`${output}`)
 }
 
 main()
-
-/**
- *
- * @param  {...unknown} args
- */
-function info(...args) {
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]
-    const suffix = i === args.length - 1 ? "" : " "
-
-    if (isPlainObject(arg)) {
-      // to key: value format
-      for (const [key, value] of Object.entries(arg)) {
-        process.stdout.write(`${key}=${value} `)
-      }
-    } else {
-      process.stdout.write(arg + suffix)
-    }
-  }
-  // console.info(...args)
-}
-
-/**
- *
- * @param {unknown} obj
- * @returns {obj is Record<string, unknown>}
- */
-function isPlainObject(obj) {
-  return typeof obj === "object" && obj !== null && obj.constructor === Object
-}
