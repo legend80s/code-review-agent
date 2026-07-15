@@ -1,6 +1,7 @@
 import assert from "node:assert"
 import { it } from "node:test"
-import { warn } from "./utils/rust-patterns/logger.mjs"
+import { debug, warn } from "./utils/rust-patterns/logger.mjs"
+import { styleText } from "node:util"
 
 /** @import { IAgentAction } from './review.type.js'  */
 
@@ -58,19 +59,53 @@ export function parse_findings_from_response(text) {
  */
 export function parse_agent_action(text) {
   const json = text.trim()
-  // console.log("json:", json)
+  debug(`json: |${styleText("yellow", json)}|`)
   // Try direct parse first
   if (json.startsWith("{")) {
-    return JSON.parse(json)
+    const action = JSON.parse(json)
+    if (isAgentAction(action)) {
+      return action
+    }
   }
   // Try to extract JSON object from surrounding text — scan for each `{`
   const matches = json.match(/\{([\s\S]*?)\}/)
   const match = matches?.[1]
   if (match) {
+    debug(`match: |${styleText("yellow", match)}|`)
     return JSON.parse(`{${match.trim()}}`)
   }
 
   return null
+}
+
+/**
+ * Type guard for AgentAction
+ * @param {any} value
+ * @returns {value is IAgentAction}
+ */
+function isAgentAction(value) {
+  if (typeof value !== "object" || value === null) return false
+
+  const action = value.action
+  if (typeof action !== "string") return false
+
+  if (action === "done") {
+    return true
+  }
+
+  if (action === "review_related") {
+    return typeof value.file === "string" && typeof value.reason === "string"
+  }
+
+  if (action === "use_tool") {
+    return (
+      typeof value.tool === "string" &&
+      typeof value.input === "string" &&
+      typeof value.reason === "string"
+    )
+  }
+
+  return false
 }
 
 if (import.meta.main) {

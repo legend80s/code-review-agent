@@ -177,59 +177,61 @@ ${review_related_option}
    Available skills: security-audit, rust-deep, performance-review, api-review, test-coverage`
 }
 
-// #[cfg(test)]
-describe("test", () => {
-  // use super::*;
+if (import.meta.main) {
+  // #[cfg(test)]
+  describe("test", () => {
+    // use super::*;
 
-  // #[test]
-  // fn test_build_system_prompt_contains_constitution_and_runtime() {
-  //     let pr_info = PrInfo {
-  //         title: "Fix null pointer in parser".to_string(),
-  //         changed_files: vec!["src/parser.rs".to_string(), "src/lib.rs".to_string()],
-  //     };
-  //     let prompt = build_system_prompt(&pr_info);
-  //     assert!(prompt.contains("Code Review Agent"));
-  //     assert!(prompt.contains("Fix null pointer in parser"));
-  //     assert!(prompt.contains("src/parser.rs"));
-  //     assert!(prompt.contains("Rust-Specific Rules"));
-  // }
+    // #[test]
+    // fn test_build_system_prompt_contains_constitution_and_runtime() {
+    //     let pr_info = PrInfo {
+    //         title: "Fix null pointer in parser".to_string(),
+    //         changed_files: vec!["src/parser.rs".to_string(), "src/lib.rs".to_string()],
+    //     };
+    //     let prompt = build_system_prompt(&pr_info);
+    //     assert!(prompt.contains("Code Review Agent"));
+    //     assert!(prompt.contains("Fix null pointer in parser"));
+    //     assert!(prompt.contains("src/parser.rs"));
+    //     assert!(prompt.contains("Rust-Specific Rules"));
+    // }
 
-  // #[test]
-  // fn test_language_detection_typescript() {
-  //     let files = vec!["app/index.tsx".to_string()];
-  //     let rules = infer_language_rules(&files);
-  //     assert!(rules.contains("TypeScript"));
-  // }
+    // #[test]
+    // fn test_language_detection_typescript() {
+    //     let files = vec!["app/index.tsx".to_string()];
+    //     let rules = infer_language_rules(&files);
+    //     assert!(rules.contains("TypeScript"));
+    // }
 
-  // #[test]
-  // fn test_no_language_rules_for_unknown() {
-  //     let files = vec!["Makefile".to_string()];
-  //     let rules = infer_language_rules(&files);
-  //     assert!(rules.is_empty());
-  // }
+    // #[test]
+    // fn test_no_language_rules_for_unknown() {
+    //     let files = vec!["Makefile".to_string()];
+    //     let rules = infer_language_rules(&files);
+    //     assert!(rules.is_empty());
+    // }
 
-  // #[test]
-  it("test_build_followup_prompt_contains_findings_and_files", () => {
-    /** @type {IFinding[]} */
-    const findings = [
-      {
-        file: "src/main.rs",
-        line: 10,
-        severity: Severity.Warning,
-        category: "bug",
-        message: "potential null deref",
-        suggestion: null,
-      },
-    ]
-    const available = ["src/lib.rs", "src/utils.rs"]
-    const prompt = build_followup_prompt("src/main.rs", findings, available)
+    // #[test]
+    it("test_build_followup_prompt_contains_findings_and_files", () => {
+      /** @type {IFinding[]} */
+      const findings = [
+        {
+          file: "src/main.rs",
+          line: 10,
+          severity: Severity.Warning,
+          category: "bug",
+          message: "potential null deref",
+          suggestion: null,
+        },
+      ]
+      const available = ["src/lib.rs", "src/utils.rs"]
+      const prompt = build_followup_prompt("src/main.rs", findings, available)
 
-    console.log("prompt:", prompt)
+      console.log("prompt:", prompt)
 
-    assert.ok(prompt.includes("src/main.rs"))
-    assert.ok(prompt.includes("potential null deref"))
-    assert.ok(prompt.includes("src/lib.rs"))
-    assert.ok(prompt.includes("src/utils.rs"))
-    assert.ok(prompt.includes(`"review_related"`))
+      assert.ok(prompt.includes("src/main.rs"))
+      assert.ok(prompt.includes("potential null deref"))
+      assert.ok(prompt.includes("src/lib.rs"))
+      assert.ok(prompt.includes("src/utils.rs"))
+      assert.ok(prompt.includes(`"review_related"`))
+    })
   })
-})
+}

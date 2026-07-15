@@ -16,7 +16,9 @@ export function info(...args) {
     if (isPlainObject(arg)) {
       // to key: value format
       for (const [key, value] of Object.entries(arg)) {
-        process.stdout.write(`${key}=${styleText("green", String(value))} `)
+        process.stdout.write(
+          `${key}=${styleText("green", typeof value === "object" ? JSON.stringify(value) : String(value))} `,
+        )
       }
     } else {
       process.stdout.write(arg + suffix)
@@ -55,7 +57,12 @@ export function withContext(fn, contextMsg) {
   try {
     return fn()
   } catch (error) {
-    const newError = new Error(`${contextMsg}: ${error.message}`)
+    const newError = new Error(
+      `${contextMsg}: ${
+        // @ts-expect-error
+        error.message
+      }`,
+    )
     newError.cause = error
     throw newError
   }

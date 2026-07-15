@@ -2,6 +2,7 @@
  * @import { LlmBackend, LlmResponse, ITokenUsage } from './llm.type.js'
  */
 
+import { debug } from "./utils/rust-patterns/logger.mjs"
 import { Err, Ok, Result } from "./utils/rust-patterns/result.mjs"
 
 export class TokenUsage {
@@ -88,7 +89,7 @@ export class CcSdkBackend {
    * @returns {Promise<{text: string}>}
    */
   async #queryLlm(user, options) {
-    console.log("user, options:", user, options)
+    debug("user, options:", { user, options })
     // Implement actual LLM query here
     // This is a placeholder
     return {

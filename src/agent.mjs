@@ -13,7 +13,12 @@ import {
   PrInfo,
 } from "./prompts.mjs"
 import { CircuitBreaker, with_retry } from "./resilience.mjs"
-import { AgentAction, parse_agent_action, parse_findings_from_response, Severity } from "./review.mjs"
+import {
+  AgentAction,
+  parse_agent_action,
+  parse_findings_from_response,
+  Severity,
+} from "./review.mjs"
 import * as tools from "./tools.mjs"
 import { error, info, warn } from "./utils/rust-patterns/logger.mjs"
 import { Ok, Result, tryCatch } from "./utils/rust-patterns/result.mjs"
@@ -224,7 +229,7 @@ export async function run_review(diff_path, config, llm) {
  * @param {RetryConfig} retry_config
  * @param {usize} max_depth
  * @param {usize} max_tool_calls
- * @param {ToolConfig} tool_config
+ * @param {import('./tools.type.js').IToolConfig} tool_config
  * @param {TokenUsage} usage
  * @returns {Promise<Result<Vec<IFinding>>>}
  */
@@ -303,114 +308,126 @@ async function review_file_with_followup(
     }
 
     const decision_response = response?.unwrap()
-    
-    usage.accumulate(decision_response.usage);
+
+    usage.accumulate(decision_response.usage)
 
     // switch (key) {
     //   case value:
-        
+
     //     break;
-    
+
     //   default:
     //     break;
     // }
     const action = parse_agent_action(decision_response.text)
     switch (action?.action) {
-        case AgentAction.Done: break;
-        case null: break;
+      case AgentAction.Done:
+        break
+      case null:
+        break
 
-        case AgentAction.ReviewRelated: {
-          const { file: related, reason } = action
-            if (max_depth === 0) { break; }
-            const related_file = file_index.get(related)
-            if (related_file) {
-                info("Agent: review related file:",
-                    {from : file.path, related : related,
-                    reason : reason}
-                );
-                let related_prompt = (
-                    "You found issues in `"+file.path+"`. Now review `"+related_file.path+"`.\n\
-                      Focus on cross-file interactions.\n\n```diff\n"+related_file.diff+"\n```"
-                );
-                const [err, resp] = await with_retry(retry_config, () => {
-                    return llm.complete(system_prompt, related_prompt)
-                })
+      case AgentAction.ReviewRelated: {
+        const { file: related, reason } = action
+        if (max_depth === 0) {
+          break
+        }
+        const related_file = file_index.get(related)
+        if (related_file) {
+          info("Agent: review related file:", {
+            from: file.path,
+            related: related,
+            reason: reason,
+          })
+          let related_prompt =
+            "You found issues in `" +
+            file.path +
+            "`. Now review `" +
+            related_file.path +
+            "`.\n\
+                      Focus on cross-file interactions.\n\n```diff\n" +
+            related_file.diff +
+            "\n```"
+          const [err, resp] = await with_retry(retry_config, () => {
+            return llm.complete(system_prompt, related_prompt)
+          })
 
-                if (err) {
-                    error("Agent: failed to review related file", {from : file.path, related : related, reason : reason, error : err})
-                } else {
+          if (err) {
+            error("Agent: failed to review related file", {
+              from: file.path,
+              related: related,
+              reason: reason,
+              error: err,
+            })
+          } else {
+            const unwrapped = response.unwrap()
 
-                  const unwrapped = response.unwrap()
-                  
-                    usage.accumulate(unwrapped.usage);
-                    findings = findings.concat(parse_findings_from_response(unwrapped.text));
-                
-                }
-            }
-            break; // Only one related file per review
+            usage.accumulate(unwrapped.usage)
+            findings = findings.concat(
+              parse_findings_from_response(unwrapped.text),
+            )
+          }
+        }
+        break // Only one related file per review
+      }
+
+      // Some(AgentAction::UseTool { tool, input, reason }) => {
+      case AgentAction.UseTool: {
+        if (tool_calls_used >= max_tool_calls) {
+          info("Tool call limit reached", { file: file.path })
+          break
         }
 
-        // Some(AgentAction::UseTool { tool, input, reason }) => {
-          case AgentAction.UseTool: {
-            if (tool_calls_used >= max_tool_calls) {
-                info("Tool call limit reached", {file: file.path});
-                break;
-            }
+        const { tool, input, reason } = action
+        info("Agent: using tool", {
+          file: file.path,
+          tool: tool,
+          reason: reason,
+        })
 
-            const { tool, input, reason } = action;
-            info("Agent: using tool",
-                {file : file.path, tool : tool,
-                reason : reason}
-            );
+        if (tool === "skill") {
+          // Skill tool: load the skill's system prompt and run
+          // a specialized review of the current file.
+          const skill_name = input.trim().split(/\s+/)[0] ?? ""
+          const skill = tools.find_skill(skill_name)
+          if (skill) {
+            info({ skill: skill.name }, "Agent: running skill analysis")
+            let skill_prompt =
+              "Analyze this code:\n\n```diff\n" + file.diff + "\n```"
 
-            if (tool === "skill") {
-                // Skill tool: load the skill's system prompt and run
-                // a specialized review of the current file.
-                let skill_name = input.trim().split(/\s+/)[0] ?? "";
-                const skill = tools.find_skill(skill_name) 
-                if (skill) {
-                    info({skill: skill.name}, "Agent: running skill analysis");
-                    let skill_prompt = 
-                        "Analyze this code:\n\n```diff\n"+file.diff+"\n```"
-                        
-                    
-                    const [err, result] = await with_retry(retry_config, () => {
-                        return llm.complete(skill.system_prompt, skill_prompt) 
-                    })
+            const [err, result] = await with_retry(retry_config, () => {
+              return llm.complete(skill.system_prompt, skill_prompt)
+            })
 
-                    if (err) {
-                      error("Agent: skill analysis failed", {file: file.path, error: err});
-                    } else {
-                      const resp = result.unwrap()
-                        usage.accumulate(resp.usage);
-                        const skill_findings = parse_findings_from_response(resp.text);
-                        info("Skill analysis complete",
-                            {skill : skill.name,
-                            findings : skill_findings.length },
-                            
-                        );
-                        findings = findings.concat(skill_findings);
-                    
-                    }
-                } else {
-                    let available = tools.list_skills()
-                        .map((n, d) => `${n}: ${d}`)
-                        .join(", ");
-                    context_addendum +=  `\n[Skill '${skill_name}' not found. Available: ${available}]\n`
-                    
-                }
+            if (err) {
+              error("Agent: skill analysis failed", {
+                file: file.path,
+                error: err,
+              })
             } else {
-                // Bash tool: execute and feed result back
-                let result = tools.execute_tool(&tool, &input, tool_config).await;
-                context_addendum.push_str(&format!(
-                    "\n[Tool: {} | Success: {}]\n{}\n",
-                    result.tool, result.success, result.output
-                ));
+              const resp = result.unwrap()
+              usage.accumulate(resp.usage)
+              const skill_findings = parse_findings_from_response(resp.text)
+              info("Skill analysis complete", {
+                skill: skill.name,
+                findings: skill_findings.length,
+              })
+              findings = findings.concat(skill_findings)
             }
-            tool_calls_used += 1;
+          } else {
+            const available = tools
+              .list_skills()
+              .map((n, d) => `${n}: ${d}`)
+              .join(", ")
+            context_addendum += `\n[Skill '${skill_name}' not found. Available: ${available}]\n`
+          }
+        } else {
+          // Bash tool: execute and feed result back
+          const result = await tools.execute_tool(tool, input, tool_config)
+          context_addendum += `\n[Tool: ${result.tool} | Success: ${result.success}]\n${result.output}\n`
         }
+        tool_calls_used += 1
+      }
     }
-
   }
 
   return Ok([
