@@ -342,6 +342,7 @@ export function list_skills() {
  * @returns {Promise<ToolResult>}
  */
 async function execute_bash(command, config) {
+  console.log("EXECUTING bash command:", command)
   // Safety check: command allowlist
   if (!is_command_allowed(command)) {
     const first_word = firstWord(command, "(empty)")
@@ -428,8 +429,14 @@ async function execute_bash(command, config) {
 export async function execute_tool(tool_name, tool_input, config) {
   debug("execute_tool:", { tool_name, tool_input })
   switch (tool_name) {
-    case "bash":
-      return execute_bash(tool_input, config)
+    case "bash": {
+      const bashResult = await execute_bash(tool_input, config)
+
+      console.log("execute_bash tool_input:", tool_input)
+      console.log("execute_bash bashResult:", bashResult)
+
+      return bashResult
+    }
     case "skill": {
       // Skill tool: look up the skill and return its prompt.
       // The Agent Loop will use this prompt to call the LLM.
