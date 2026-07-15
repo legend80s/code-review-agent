@@ -31,7 +31,7 @@ export function info(...args) {
 /** @param  {...unknown} args */
 export function debug(...args) {
   if (debugging) {
-    info(styleText("yellow", "🐛 DEBUG"), ...args)
+    console.debug(styleText("yellow", "🐛 DEBUG"), ...args)
   }
 }
 
