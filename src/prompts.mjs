@@ -1,6 +1,10 @@
 /** @import { IPrInfo } from './prompts.type.js' */
+/** @import { IFinding } from './review.type.js' */
 
+import { describe, it } from "node:test"
+import assert from "node:assert"
 import { DiffContext } from "./context.mjs"
+import { Severity } from "./review.mjs"
 
 // biome-ignore lint/complexity/noStaticOnlyClass: <explanation>
 export class PrInfo {
@@ -116,3 +120,116 @@ function infer_language_rules(files) {
 
   return rules.join("\n\n")
 }
+
+/**
+ *
+ * @param { string} reviewed_file
+ * @param {readonly IFinding[]} findings
+ * @param {readonly string[]} available_files
+ * @returns {string}
+ */
+export function build_followup_prompt(
+  reviewed_file,
+  findings,
+  available_files,
+) {
+  /** @type {string} */
+  const findings_summary = findings
+    .slice(0, 5) // limit to top 5 to save tokens
+    .map((f) => `  - [${f.severity}] ${f.file}: ${f.message}`)
+    .join("\n")
+
+  const files_list = available_files.map((f) => `  - ${f}`).join("\n")
+
+  const related_files_section =
+    available_files.length === 0
+      ? "No other files in the changeset."
+      : `The changeset also includes these other files:\n\n${files_list}`
+
+  const review_related_option =
+    available_files.length === 0
+      ? ""
+      : `
+2. Review a related file from the changeset:
+   {{"action": "review_related", "file": "<path>", "reason": "<why>"}}
+`
+
+  return `You just reviewed \`${reviewed_file}\` and found these issues:
+
+${findings_summary}
+
+${related_files_section}
+
+What should you do next? You can use read-only bash commands to get more context (e.g., look up a function definition, search for callers, check a config file).
+
+Respond with ONLY a JSON object, no other text. Choose ONE action:
+
+1. No follow-up needed:
+   {{"action": "done"}}
+${review_related_option}
+3. Run a read-only bash command to get more context:
+   {{"action": "use_tool", "tool": "bash", "input": "<command>", "reason": "<why>"}}
+   Allowed commands: cat, grep, find, head, tail, wc, ls, sort, uniq, awk, sed, etc.
+   Example: {{"action": "use_tool", "tool": "bash", "input": "grep -rn 'MAX_RETRIES' src/", "reason": "check the constant value"}}
+
+4. Run a specialized analysis skill on the current file:
+   {{"action": "use_tool", "tool": "skill", "input": "<skill_name>", "reason": "<why>"}}
+   Available skills: security-audit, rust-deep, performance-review, api-review, test-coverage`
+}
+
+// #[cfg(test)]
+describe("test", () => {
+  // use super::*;
+
+  // #[test]
+  // fn test_build_system_prompt_contains_constitution_and_runtime() {
+  //     let pr_info = PrInfo {
+  //         title: "Fix null pointer in parser".to_string(),
+  //         changed_files: vec!["src/parser.rs".to_string(), "src/lib.rs".to_string()],
+  //     };
+  //     let prompt = build_system_prompt(&pr_info);
+  //     assert!(prompt.contains("Code Review Agent"));
+  //     assert!(prompt.contains("Fix null pointer in parser"));
+  //     assert!(prompt.contains("src/parser.rs"));
+  //     assert!(prompt.contains("Rust-Specific Rules"));
+  // }
+
+  // #[test]
+  // fn test_language_detection_typescript() {
+  //     let files = vec!["app/index.tsx".to_string()];
+  //     let rules = infer_language_rules(&files);
+  //     assert!(rules.contains("TypeScript"));
+  // }
+
+  // #[test]
+  // fn test_no_language_rules_for_unknown() {
+  //     let files = vec!["Makefile".to_string()];
+  //     let rules = infer_language_rules(&files);
+  //     assert!(rules.is_empty());
+  // }
+
+  // #[test]
+  it("test_build_followup_prompt_contains_findings_and_files", () => {
+    /** @type {IFinding[]} */
+    const findings = [
+      {
+        file: "src/main.rs",
+        line: 10,
+        severity: Severity.Warning,
+        category: "bug",
+        message: "potential null deref",
+        suggestion: null,
+      },
+    ]
+    const available = ["src/lib.rs", "src/utils.rs"]
+    const prompt = build_followup_prompt("src/main.rs", findings, available)
+
+    console.log("prompt:", prompt)
+
+    assert.ok(prompt.includes("src/main.rs"))
+    assert.ok(prompt.includes("potential null deref"))
+    assert.ok(prompt.includes("src/lib.rs"))
+    assert.ok(prompt.includes("src/utils.rs"))
+    assert.ok(prompt.includes(`"review_related"`))
+  })
+})

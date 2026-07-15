@@ -1,10 +1,10 @@
 import type { Severity } from "./review.mjs"
 import type { f64, Option, u32, u64, usize, Vec } from "./type.js"
 
-export type AgentAction =
-  | { type: "Done" }
-  | { type: "ReviewRelated"; file: string; reason: string }
-  | { type: "UseTool"; tool: string; input: string; reason: string }
+export type IAgentAction =
+  | { action: "done" }
+  | { action: "review_related"; file: string; reason: string }
+  | { action: "use_tool"; tool: string; input: string; reason: string }
 
 /// Aggregate review report.
 export type IReviewReport = {
@@ -22,7 +22,7 @@ export type IReviewReport = {
   cost_usd: f64 | null
 }
 
-export type IFinding = {
+export type IFinding = Readonly<{
   /// File path the finding applies to.
   file: string
   /// Line number (if applicable).
@@ -35,7 +35,7 @@ export type IFinding = {
   message: string
   /// Optional concrete suggestion for a fix.
   suggestion: Option<string>
-}
+}>
 
 /// Severity level for a finding.
 ///

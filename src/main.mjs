@@ -47,13 +47,17 @@ async function main() {
       throw new TypeError("--diff is required in CLI mode")
     })()
 
-  info("review_started:", {
-    diff: cli.diff,
-    max_tokens: cli.max_tokens,
-    max_file_tokens: cli.max_file_tokens,
-    // backend: ?cli.backend,
-    output_format: cli.output_format,
-  })
+  info(
+    "\nreview_started:",
+    {
+      diff: cli.diff,
+      max_tokens: cli.max_tokens,
+      max_file_tokens: cli.max_file_tokens,
+      // backend: ?cli.backend,
+      output_format: cli.output_format,
+    },
+    "\n",
+  )
   // return
 
   /**
@@ -61,10 +65,12 @@ async function main() {
    */
   const cliOptions = {
     ...values,
-    max_tokens: Number(cli.max_tokens),
-    max_file_tokens: Number(cli.max_file_tokens),
+    max_tokens: Number(cli.max_tokens.replace("_", "")),
+    max_file_tokens: Number(cli.max_file_tokens.replace("_", "")),
     output_format: cli.output_format === "json" ? "json" : "markdown",
   }
+
+  // console.log("cliOptions:", cliOptions)
 
   /**
    * @type {import('./agent.type.js').IReviewConfig}
@@ -82,7 +88,7 @@ async function main() {
 
   // console.log("report:", report)
 
-  info("review_completed:", { summary: report.summary_line() })
+  info("\nreview_completed:", { summary: report.summary_line() })
 
   // Format and output
   // switch (key) {
@@ -109,7 +115,7 @@ async function main() {
     }
   })()
 
-  console.log(`output in ${cli.output_format}:\n${output}`)
+  console.log(`\noutput in ${cli.output_format}:\n${output}`)
 }
 
 main()

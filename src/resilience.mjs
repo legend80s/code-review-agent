@@ -15,10 +15,9 @@ const MAX_BACKOFF_MS = 30_000
  * The operation is called up to `1 + config.max_retries` times.
  * Delay between attempts: `base_delay_ms * 2^attempt`, capped at 30 seconds.
  * @template T
- * @template {() => Promise<T>} F
  * @param {RetryConfig} config
- * @param {F} operation
- * @returns {Promise<[null, T] | [unknown, null]>}
+ * @param {() => Promise<T>} operation
+ * @returns {Promise<[null, T] | [Error, null]>}
  */
 export async function with_retry(config, operation) {
   // Option<anyhow::Error>
@@ -54,7 +53,11 @@ export async function with_retry(config, operation) {
     }
   }
 
-  return [last_error || "retry loop completed with no attempts", null]
+  return [
+    // @ts-expect-error
+    last_error || new Error("retry loop completed with no attempts"),
+    null,
+  ]
 }
 
 export class CircuitBreaker {

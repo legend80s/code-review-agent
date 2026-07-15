@@ -7,13 +7,18 @@
 
 import { applyBudget, ContextBudget, load_diff } from "./context.mjs"
 import { TokenUsage } from "./llm.mjs"
-import { build_system_prompt, PrInfo } from "./prompts.mjs"
-import { CircuitBreaker } from "./resilience.mjs"
-import { Severity } from "./review.mjs"
-import { ToolConfig } from "./tools.mjs"
-import { info, warn } from "./utils/rust-patterns/logger.mjs"
+import {
+  build_followup_prompt,
+  build_system_prompt,
+  PrInfo,
+} from "./prompts.mjs"
+import { CircuitBreaker, with_retry } from "./resilience.mjs"
+import { AgentAction, parse_agent_action, parse_findings_from_response, Severity } from "./review.mjs"
+import * as tools from "./tools.mjs"
+import { error, info, warn } from "./utils/rust-patterns/logger.mjs"
 import { Ok, Result, tryCatch } from "./utils/rust-patterns/result.mjs"
 
+const { ToolConfig } = tools
 class ReviewReport {
   /**
    * Number of files that were reviewed.
@@ -107,14 +112,17 @@ export async function run_review(diff_path, config, llm) {
   const diff_context = load_diff(diff_path)
     .context("Failed to load diff")
     .unwrap()
-  info("Loaded diff:", { files: diff_context.files.length })
+
+  info("Loaded diff:", { files: diff_context.files.length }, "\n")
 
   // Step 2: Apply budget
   const budget = new ContextBudget(config.max_tokens, config.max_file_tokens)
+  // console.log("config:", config)
+  // console.log("budget:", budget)
   const [constrained_diff, files_skipped] = applyBudget(diff_context, budget)
 
   const files_to_review = constrained_diff.files.length
-  info("Budget applied:", {
+  info("\nBudget applied:", {
     files_to_review,
     files_skipped,
     tokens_used: budget.usedTokens,
@@ -231,10 +239,179 @@ async function review_file_with_followup(
   tool_config,
   usage,
 ) {
+  console.log("review_file_with_followup, system_prompt:", system_prompt)
+
   // Turn 1: Review the file's diff
   const user_prompt = `Review this diff for \`${file.path}\`:\n\n\`\`\`diff\n${file.diff}\n\`\`\``
 
-  info(user_prompt)
+  // info(user_prompt)
+
+  const [err, response] = await with_retry(retry_config, () => {
+    const sp = system_prompt
+    const up = user_prompt
+    return llm.complete(sp, up)
+  })
+
+  if (err) {
+    console.error(err)
+    throw err
+  }
+
+  const unwrappedResponse = response?.unwrap()
+  console.log("value:", unwrappedResponse)
+
+  if (!unwrappedResponse?.usage) {
+    console.error("No usage found in response")
+    throw new Error("No usage found in response")
+  }
+
+  usage.accumulate(unwrappedResponse.usage)
+  let findings = parse_findings_from_response(unwrappedResponse.text)
+
+  // Turn 2+: Agent decision loop — the LLM can request tools or related file review.
+  // Each iteration: ask for next action → execute → feed result back.
+  // Capped at max_tool_calls to prevent runaway loops.
+  let tool_calls_used = 0
+  let context_addendum = "" // accumulated tool results
+
+  if (!(max_depth > 0 || max_tool_calls > 0)) {
+    return Ok(findings)
+  }
+
+  const available_files = file_index
+    .keys()
+    .filter((k) => k !== file.path)
+    .toArray()
+
+  console.log("available_files:", available_files)
+
+  while (tool_calls_used < max_tool_calls) {
+    const decision_prompt =
+      context_addendum === ""
+        ? build_followup_prompt(file.path, findings, available_files)
+        : `${build_followup_prompt(file.path, findings, available_files)}\n\n--- Tool Results ---\n${context_addendum}\n\nBased on these results, what's your next action?`
+
+    const [err, response] = await with_retry(retry_config, () => {
+      return llm.complete(system_prompt, decision_prompt)
+    })
+
+    if (err) {
+      // console.error(err)
+      warn("Follow-up decision call failed", { file: file.path, error: err })
+
+      break
+    }
+
+    const decision_response = response?.unwrap()
+    
+    usage.accumulate(decision_response.usage);
+
+    // switch (key) {
+    //   case value:
+        
+    //     break;
+    
+    //   default:
+    //     break;
+    // }
+    const action = parse_agent_action(decision_response.text)
+    switch (action?.action) {
+        case AgentAction.Done: break;
+        case null: break;
+
+        case AgentAction.ReviewRelated: {
+          const { file: related, reason } = action
+            if (max_depth === 0) { break; }
+            const related_file = file_index.get(related)
+            if (related_file) {
+                info("Agent: review related file:",
+                    {from : file.path, related : related,
+                    reason : reason}
+                );
+                let related_prompt = (
+                    "You found issues in `"+file.path+"`. Now review `"+related_file.path+"`.\n\
+                      Focus on cross-file interactions.\n\n```diff\n"+related_file.diff+"\n```"
+                );
+                const [err, resp] = await with_retry(retry_config, () => {
+                    return llm.complete(system_prompt, related_prompt)
+                })
+
+                if (err) {
+                    error("Agent: failed to review related file", {from : file.path, related : related, reason : reason, error : err})
+                } else {
+
+                  const unwrapped = response.unwrap()
+                  
+                    usage.accumulate(unwrapped.usage);
+                    findings = findings.concat(parse_findings_from_response(unwrapped.text));
+                
+                }
+            }
+            break; // Only one related file per review
+        }
+
+        // Some(AgentAction::UseTool { tool, input, reason }) => {
+          case AgentAction.UseTool: {
+            if (tool_calls_used >= max_tool_calls) {
+                info("Tool call limit reached", {file: file.path});
+                break;
+            }
+
+            const { tool, input, reason } = action;
+            info("Agent: using tool",
+                {file : file.path, tool : tool,
+                reason : reason}
+            );
+
+            if (tool === "skill") {
+                // Skill tool: load the skill's system prompt and run
+                // a specialized review of the current file.
+                let skill_name = input.trim().split(/\s+/)[0] ?? "";
+                const skill = tools.find_skill(skill_name) 
+                if (skill) {
+                    info({skill: skill.name}, "Agent: running skill analysis");
+                    let skill_prompt = 
+                        "Analyze this code:\n\n```diff\n"+file.diff+"\n```"
+                        
+                    
+                    const [err, result] = await with_retry(retry_config, () => {
+                        return llm.complete(skill.system_prompt, skill_prompt) 
+                    })
+
+                    if (err) {
+                      error("Agent: skill analysis failed", {file: file.path, error: err});
+                    } else {
+                      const resp = result.unwrap()
+                        usage.accumulate(resp.usage);
+                        const skill_findings = parse_findings_from_response(resp.text);
+                        info("Skill analysis complete",
+                            {skill : skill.name,
+                            findings : skill_findings.length },
+                            
+                        );
+                        findings = findings.concat(skill_findings);
+                    
+                    }
+                } else {
+                    let available = tools.list_skills()
+                        .map((n, d) => `${n}: ${d}`)
+                        .join(", ");
+                    context_addendum +=  `\n[Skill '${skill_name}' not found. Available: ${available}]\n`
+                    
+                }
+            } else {
+                // Bash tool: execute and feed result back
+                let result = tools.execute_tool(&tool, &input, tool_config).await;
+                context_addendum.push_str(&format!(
+                    "\n[Tool: {} | Success: {}]\n{}\n",
+                    result.tool, result.success, result.output
+                ));
+            }
+            tool_calls_used += 1;
+        }
+    }
+
+  }
 
   return Ok([
     {

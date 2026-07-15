@@ -11,6 +11,7 @@ export function info(...args) {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
     const suffix = i === args.length - 1 ? "" : " "
+    // console.log("arg:", arg)
 
     if (isPlainObject(arg)) {
       // to key: value format
@@ -28,13 +29,18 @@ export function info(...args) {
 /** @param  {...unknown} args */
 export function debug(...args) {
   if (debugging) {
-    info(...args)
+    info(styleText("yellow", "🐛 DEBUG"), ...args)
   }
 }
 
 /** @param  {...unknown} args */
 export function warn(...args) {
-  return info(...args)
+  return info(styleText("yellow", "☣️  WARN"), ...args)
+}
+
+/** @param  {...unknown} args */
+export function error(...args) {
+  return info(styleText("red", "❌ ERR"), ...args)
 }
 
 /**

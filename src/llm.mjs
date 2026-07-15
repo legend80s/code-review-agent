@@ -26,6 +26,15 @@ export class TokenUsage {
       output_tokens: 0,
     })
   }
+  /// Accumulate usage from another response.
+  /**
+   *
+   * @param {ITokenUsage} other
+   */
+  accumulate(other) {
+    this.input_tokens = (this.input_tokens ?? 0) + (other.input_tokens ?? 0)
+    this.output_tokens = (this.output_tokens ?? 0) + (other.output_tokens ?? 0)
+  }
 
   /// Total tokens (input + output), or 0 if unknown.
   /**

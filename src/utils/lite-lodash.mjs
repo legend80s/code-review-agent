@@ -25,3 +25,15 @@ export function lines(text) {
 export function strip_prefix(str, prefix) {
   return str.startsWith(prefix) ? str.slice(prefix.length) : null
 }
+
+/**
+ * 获取输入字符串的第一个单词
+ * @param {string} input
+ * @returns {string}
+ *
+ * let skill_name = tool_input.split_whitespace().next().unwrap_or("");
+ *
+ */
+export function firstWord(input, fallback = "") {
+  return input.trim().split(/\s+/)[0] || fallback
+}
