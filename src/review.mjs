@@ -83,7 +83,7 @@ export function parse_findings_from_response(text) {
  */
 export function parse_agent_action(text) {
   const json = text.trim()
-  debug(`json: |${styleText("yellow", json)}|`)
+  // debug(`json: |${styleText("yellow", json)}|`)
   // Try direct parse first
   if (json.startsWith("{")) {
     const action = JSON.parse(json)

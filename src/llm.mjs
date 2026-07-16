@@ -73,6 +73,7 @@ export class CcSdkBackend {
       }
 
       const { text, tokenUsage } = await this.#queryLlm(user, options)
+      console.log("llm responded text:", "|", text, "|")
 
       return Ok({
         text,
@@ -97,22 +98,24 @@ export class CcSdkBackend {
    * @returns {Promise<{text: string, tokenUsage: TokenUsage}>}
    */
   async #queryLlm(user, options) {
-    debug("user:|", user, "|")
-    debug("options:", "|", options, "|")
+    debug("user:|", user.slice(0, 200), "...|")
+    debug("systemPrompt:", "|", options.systemPrompt.slice(0, 100), "|")
     // Implement actual LLM query here
     // This is a placeholder
 
-    const stream = await this.openai.chat.completions.create({
-      messages: [
-        { role: "system", content: options.systemPrompt },
-        { role: "user", content: user },
-      ],
-      model: "deepseek-v4-flash",
-      thinking: { type: "disabled" },
-      // thinking: { type: "enabled" },
-      // reasoning_effort: "high",
-      stream: true,
-    })
+    const stream = await this.openai.chat.completions
+      // @ts-expect-error
+      .create({
+        messages: [
+          { role: "system", content: options.systemPrompt },
+          { role: "user", content: user },
+        ],
+        model: "deepseek-v4-flash",
+        thinking: { type: "disabled" },
+        // thinking: { type: "enabled" },
+        // reasoning_effort: "high",
+        stream: true,
+      })
 
     // console.log("completion:", completion.choices[0])
 
@@ -131,10 +134,12 @@ export class CcSdkBackend {
 
         console.log(
           "prompt_cache_hit_tokens:",
+          // @ts-expect-error
           event.usage.prompt_cache_hit_tokens,
         )
         console.log(
           "prompt_cache_miss_tokens:",
+          // @ts-expect-error
           event.usage.prompt_cache_miss_tokens,
         )
       }

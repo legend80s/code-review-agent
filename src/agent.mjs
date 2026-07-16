@@ -5,6 +5,7 @@
 /** @import { RetryConfig } from './resilience.type.js' */
 /** @import { ITokenUsage, LlmBackend } from './llm.type.js' */
 
+import { styleText } from "util"
 import { applyBudget, ContextBudget, load_diff } from "./context.mjs"
 import { TokenUsage } from "./llm.mjs"
 import {
@@ -20,7 +21,7 @@ import {
   Severity,
 } from "./review.mjs"
 import * as tools from "./tools.mjs"
-import { error, info, warn } from "./utils/rust-patterns/logger.mjs"
+import { debug, error, info, warn } from "./utils/rust-patterns/logger.mjs"
 import { Ok, Result, tryCatch } from "./utils/rust-patterns/result.mjs"
 
 const { ToolConfig } = tools
@@ -244,7 +245,10 @@ async function review_file_with_followup(
   tool_config,
   usage,
 ) {
-  console.log("review_file_with_followup, system_prompt:", system_prompt)
+  console.log(
+    "review_file_with_followup, system_prompt:",
+    system_prompt.slice(0, 100),
+  )
 
   // Turn 1: Review the file's diff
   const user_prompt = `Review this diff for \`${file.path}\`:\n\n\`\`\`diff\n${file.diff}\n\`\`\``
@@ -263,7 +267,7 @@ async function review_file_with_followup(
   }
 
   const unwrappedResponse = response?.unwrap()
-  console.log("value:", unwrappedResponse)
+  // console.log("value:", unwrappedResponse)
 
   if (!unwrappedResponse?.usage) {
     console.error("No usage found in response")
@@ -291,6 +295,7 @@ async function review_file_with_followup(
   console.log("available_files:", available_files)
 
   while (tool_calls_used < max_tool_calls) {
+    console.log("tool_calls_used:", { tool_calls_used, max_tool_calls })
     const decision_prompt =
       context_addendum === ""
         ? build_followup_prompt(file.path, findings, available_files)
@@ -319,17 +324,22 @@ async function review_file_with_followup(
     //   default:
     //     break;
     // }
+    debug(
+      `decision_response.text: |${styleText("yellow", decision_response.text)}|`,
+    )
     const action = parse_agent_action(decision_response.text)
+    debug("action", action)
+
     switch (action?.action) {
       case AgentAction.Done:
-        break
+        return Ok(findings)
       case null:
-        break
+        return Ok(findings)
 
       case AgentAction.ReviewRelated: {
         const { file: related, reason } = action
         if (max_depth === 0) {
-          break
+          return Ok(findings)
         }
         const related_file = file_index.get(related)
         if (related_file) {
@@ -367,14 +377,14 @@ async function review_file_with_followup(
             )
           }
         }
-        break // Only one related file per review
+        return Ok(findings) // Only one related file per review
       }
 
       // Some(AgentAction::UseTool { tool, input, reason }) => {
       case AgentAction.UseTool: {
         if (tool_calls_used >= max_tool_calls) {
           info("Tool call limit reached", { file: file.path })
-          break
+          return Ok(findings)
         }
 
         const { tool, input, reason } = action
@@ -430,14 +440,5 @@ async function review_file_with_followup(
     }
   }
 
-  return Ok([
-    {
-      file: "foo",
-      line: 1,
-      severity: /** @type {ISeverity} */ ("Critical"),
-      category: "perf",
-      message: "mock",
-      suggestion: "foo bar baz",
-    },
-  ])
+  return Ok(findings)
 }

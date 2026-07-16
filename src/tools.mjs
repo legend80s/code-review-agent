@@ -369,7 +369,7 @@ async function execute_bash(command, config) {
       return new ToolResult({
         tool: "bash",
         success: false,
-        output: `Shell metacharacters (${SHELL_METACHARACTERS.join("")}) are not allowed. Use simple commands only.`,
+        output: `Possible shell injection (\`${cmd}\`): Shell metacharacters (${SHELL_METACHARACTERS.join("")}) are not allowed. Use simple commands only.`,
       })
     }
 
@@ -628,7 +628,7 @@ function test_execute_bash() {
       assert.ok(result.output.includes("metacharacter"))
       assert.deepStrictEqual(result.toObject(), {
         output:
-          "Shell metacharacters (;|&`$(){}) are not allowed. Use simple commands only.",
+          "Possible shell injection (`cat file; uname -a`): Shell metacharacters (;|&`$(){}) are not allowed. Use simple commands only.",
         success: false,
         tool: "bash",
       })
@@ -673,7 +673,7 @@ function test_execute_bash() {
 
     it("tinyexec demo", async () => {
       // 使用示例
-      const proc1 = exec("grep", ["-rn", "console.log", "src/llm.mjs"])
+      const proc1 = exec("grep", ["-r", "console.log", "src/llm.mjs"])
       const proc2 = proc1.pipe("head", ["-20"])
       const result = await proc2
       // console.log("输出:", result.stdout)
@@ -681,31 +681,31 @@ function test_execute_bash() {
       assert.deepStrictEqual(result, {
         exitCode: 0,
         stderr: "",
-        stdout: `117:    // console.log("completion:", completion.choices[0])
-119:    // console.log("Answer:", completion.choices[0].message.content)
-132:        console.log(
-136:        console.log(
-193:      // console.log(event.choices[0]?.delta)
-224:  console.log("\\n\\ntext:", result.text)
-225:  console.log("\\nusage:", result.usage)
+        stdout: `    // console.log("completion:", completion.choices[0])
+    // console.log("Answer:", completion.choices[0].message.content)
+        console.log(
+        console.log(
+      // console.log(event.choices[0]?.delta)
+  console.log("\\n\\ntext:", result.text)
+  console.log("\\nusage:", result.usage)
 `,
       })
     })
 
     it("should not block read bash even | exists", async () => {
-      const cmd = `grep -rn 'console.log' src/llm.mjs | head -20`
+      const cmd = `grep -r 'console.log' src/llm.mjs | head -20`
       const config = ToolConfig.default()
       const result = await execute_bash(cmd, config)
       // assert.ok(result.success)
       // assert.ok(result.output.includes("metacharacter"))
       assert.deepStrictEqual(result.toObject(), {
-        output: `117:    // console.log("completion:", completion.choices[0])
-119:    // console.log("Answer:", completion.choices[0].message.content)
-132:        console.log(
-136:        console.log(
-193:      // console.log(event.choices[0]?.delta)
-224:  console.log("\\n\\ntext:", result.text)
-225:  console.log("\\nusage:", result.usage)
+        output: `    // console.log("completion:", completion.choices[0])
+    // console.log("Answer:", completion.choices[0].message.content)
+        console.log(
+        console.log(
+      // console.log(event.choices[0]?.delta)
+  console.log("\\n\\ntext:", result.text)
+  console.log("\\nusage:", result.usage)
 `,
         success: true,
         tool: "bash",
