@@ -298,7 +298,7 @@ function test_parse_agent_action() {
     assert.equal(action.reason, "shared types")
   })
 
-  // // #[test]
+  // #[test]
   it("test_parse_agent_action_from_surrounding_text", () => {
     const text = `Based on the findings, I recommend: {"action": "review_related", "file": "src/utils.rs", "reason": "caller"} since it calls the changed function.`
 
@@ -307,7 +307,7 @@ function test_parse_agent_action() {
     assert.equal(action?.action, AgentAction.ReviewRelated)
   })
 
-  // // #[test]
+  // #[test]
   it("test_parse_agent_action_garbage_returns_none", () => {
     const action = parse_agent_action("I think we're done here, no issues.")
     assert.equal(action, null)

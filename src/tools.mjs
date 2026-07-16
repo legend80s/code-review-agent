@@ -1,10 +1,13 @@
 // examples/code-review-agent/src/tools.rs — 工具安全约束
 
-import { describe, it } from "node:test"
-import { firstWord } from "./utils/lite-lodash.mjs"
-import assert from "assert"
-import { debug, warn } from "./utils/rust-patterns/logger.mjs"
+import assert from "node:assert"
 import { spawn } from "node:child_process"
+import { describe, it } from "node:test"
+import { styleText } from "node:util"
+import { tokenizeArgs } from "args-tokenizer"
+import { x as exec } from "tinyexec"
+import { firstWord } from "./utils/lite-lodash.mjs"
+import { debug, warn } from "./utils/rust-patterns/logger.mjs"
 
 //! Tool execution for the Agent Loop.
 //!
@@ -145,9 +148,9 @@ export const BLOCKED_COMMANDS = /** @type {const} */ ([
  */
 function is_command_allowed(command) {
   // Extract the first word (the actual command)
-  let first_word = firstWord(command)
+  const first_word = firstWord(command)
   // Strip any path prefix (e.g., /usr/bin/cat → cat)
-  let cmd_name = first_word.split("/").at(-1) || first_word
+  const cmd_name = first_word.split("/").at(-1) || first_word
 
   if (
     BLOCKED_COMMANDS.includes(
@@ -342,36 +345,42 @@ export function list_skills() {
  * @returns {Promise<ToolResult>}
  */
 async function execute_bash(command, config) {
-  console.log("EXECUTING bash command:", command)
+  console.log("EXECUTING bash command:", `\`${styleText("green", command)}\``)
+
+  const cmds = command.split(/\s*\|\s*/)
+
   // Safety check: command allowlist
-  if (!is_command_allowed(command)) {
-    const first_word = firstWord(command, "(empty)")
-    warn({ command: first_word }, "Blocked disallowed bash command")
-    return new ToolResult({
-      tool: "bash",
-      success: false,
-      output: `Command not allowed: ${first_word}. Only read-only commands are permitted.`,
-    })
-  }
+  for (const cmd of cmds) {
+    if (!is_command_allowed(cmd)) {
+      const first_word = firstWord(cmd, "(empty)")
+      warn({ cmd: first_word }, "Blocked disallowed bash command")
 
-  // Block shell metacharacters to prevent injection via `sh -c`
-  // e.g., "cat file; uname -a" or "grep foo $(id)"
-  if (SHELL_METACHARACTERS.some((meta_char) => command.includes(meta_char))) {
-    warn(command, "Blocked shell metacharacter in command")
-    return new ToolResult({
-      tool: "bash",
-      success: false,
-      output: `Shell metacharacters (${SHELL_METACHARACTERS.join("")}) are not allowed. Use simple commands only.`,
-    })
-  }
+      return new ToolResult({
+        tool: "bash",
+        success: false,
+        output: `Command not allowed: ${first_word}. Only read-only commands are permitted.`,
+      })
+    }
 
-  // Block output redirection
-  if (command.includes(">")) {
-    return new ToolResult({
-      tool: "bash",
-      success: false,
-      output: "Output redirection (>) is not allowed in read-only mode.",
-    })
+    // Block shell metacharacters to prevent injection via `sh -c`
+    // e.g., "cat file; uname -a" or "grep foo $(id)"
+    if (SHELL_METACHARACTERS.some((meta_char) => cmd.includes(meta_char))) {
+      warn("Blocked shell metacharacter in command", `\`${cmd}\``)
+      return new ToolResult({
+        tool: "bash",
+        success: false,
+        output: `Shell metacharacters (${SHELL_METACHARACTERS.join("")}) are not allowed. Use simple commands only.`,
+      })
+    }
+
+    // Block output redirection
+    if (cmd.includes(">")) {
+      return new ToolResult({
+        tool: "bash",
+        success: false,
+        output: "Output redirection (>) is not allowed in read-only mode.",
+      })
+    }
   }
 
   debug(`Executing bash tool: \`${command}\``)
@@ -382,8 +391,8 @@ async function execute_bash(command, config) {
   // console.log(parseCommand('echo hello')); // { program: 'echo', args: ['hello'] }
   // console.log(parseCommand('echo hello world')); // { program: 'echo', args: ['hello', 'world'] }
 
-  const [program, ...args] = command.trim().split(/\s+/)
-  if (program == null || program === "") {
+  const [program] = firstWord(command)
+  if (!program) {
     return new ToolResult({
       tool: "bash",
       success: false,
@@ -393,7 +402,11 @@ async function execute_bash(command, config) {
 
   // spawn a child process to run the command
 
-  const { stderr, stdout, code } = await spawnAsync(program, args, {
+  const {
+    stderr,
+    stdout,
+    exitCode: code,
+  } = await spawnAsync(command, {
     // stdio: "pipe",
     cwd: config.cwd || undefined,
     timeout: config.timeout_secs * 1000,
@@ -428,6 +441,7 @@ async function execute_bash(command, config) {
  */
 export async function execute_tool(tool_name, tool_input, config) {
   debug("execute_tool:", { tool_name, tool_input })
+
   switch (tool_name) {
     case "bash": {
       const bashResult = await execute_bash(tool_input, config)
@@ -472,9 +486,69 @@ export async function execute_tool(tool_name, tool_input, config) {
   }
 }
 
+/**
+ * `command.trim().split(/\s+/)` is not good enough because it doesn't handle quotes and space in arg properly.
+ * @param {string} command
+ * @returns {{ tool_name: string | undefined, args: string[]}}
+ */
+function parse_command_and_args(command) {
+  const [cmd, ...args] = tokenizeArgs(command)
+
+  return { tool_name: cmd, args }
+}
+
+/**
+ *
+ * @param {string} command
+ * @returns {{ tool_name: string | undefined, args: string[]}[]}
+ */
+function parsePipeCommands(command) {
+  const cmds = command.split(/\s*\|\s*/)
+
+  return cmds.map((cmd) => {
+    return parse_command_and_args(cmd)
+  })
+}
+
 if (import.meta.main) {
   test_is_command_allowed()
   test_execute_bash()
+
+  test_parse_command_and_args()
+}
+
+function test_parse_command_and_args() {
+  it("parse_command_and_args", () => {
+    const command = `   grep -rn          'console          .log' src/llm.mjs     | head -20   `
+    const actual = parse_command_and_args(command)
+    const expected = {
+      tool_name: "grep",
+      args: ["-rn", "console          .log", "src/llm.mjs", "|", "head", "-20"],
+    }
+
+    assert.deepStrictEqual(actual, expected)
+  })
+  it("parse_command_and_args empty string", () => {
+    const command = `   `
+    const actual = parse_command_and_args(command)
+    const expected = { tool_name: undefined, args: [] }
+
+    assert.deepStrictEqual(actual, expected)
+  })
+  it("parse_command_and_args cmd with |", () => {
+    const command = `   grep -rn          'console          .log' src/llm.mjs     | head -20   `
+    const actual = parsePipeCommands(command)
+    const expected = [
+      {
+        tool_name: "grep",
+        args: ["-rn", "console          .log", "src/llm.mjs"],
+      },
+      // "|",
+      { tool_name: "head", args: ["-20"] },
+    ]
+
+    assert.deepStrictEqual(actual, expected)
+  })
 }
 
 function test_is_command_allowed() {
@@ -562,34 +636,80 @@ function test_execute_bash() {
 
     // #[tokio::test]
     it("test_bash_pipe_injection_blocked", async () => {
-      let config = ToolConfig.default()
-      let result = await execute_bash("cat file | rm -rf ./temp.txt", config)
-      assert.ok(!result.success)
-      assert.ok(result.output.includes("metacharacter"))
+      const config = ToolConfig.default()
+      const result = await execute_bash("cat file | rm -rf ./temp.txt", config)
+      console.log("result:", result)
+      assert.deepStrictEqual(result.toObject(), {
+        tool: "bash",
+        success: false,
+        output:
+          "Command not allowed: rm. Only read-only commands are permitted.",
+      })
     })
 
     // #[tokio::test]
     it("test_bash_subshell_injection_blocked", async () => {
-      let config = ToolConfig.default()
-      let result = await execute_bash("grep foo $(id)", config)
+      const config = ToolConfig.default()
+      const result = await execute_bash("grep foo $(id)", config)
       assert.ok(!result.success)
       assert.ok(result.output.includes("metacharacter"))
     })
 
     // #[tokio::test]
     it("test_bash_backtick_injection_blocked", async () => {
-      let config = ToolConfig.default()
-      let result = await execute_bash("cat `whoami`", config)
+      const config = ToolConfig.default()
+      const result = await execute_bash("cat `whoami`", config)
       assert.ok(!result.success)
       assert.ok(result.output.includes("metacharacter"))
     })
 
     // #[tokio::test]
     it("test_bash_and_chain_blocked", async () => {
-      let config = ToolConfig.default()
-      let result = await execute_bash("cat file && rm -rf /", config)
+      const config = ToolConfig.default()
+      const result = await execute_bash("cat file && rm -rf /", config)
       assert.ok(!result.success)
       assert.ok(result.output.includes("metacharacter"))
+    })
+
+    it("tinyexec demo", async () => {
+      // 使用示例
+      const proc1 = exec("grep", ["-rn", "console.log", "src/llm.mjs"])
+      const proc2 = proc1.pipe("head", ["-20"])
+      const result = await proc2
+      // console.log("输出:", result.stdout)
+
+      assert.deepStrictEqual(result, {
+        exitCode: 0,
+        stderr: "",
+        stdout: `117:    // console.log("completion:", completion.choices[0])
+119:    // console.log("Answer:", completion.choices[0].message.content)
+132:        console.log(
+136:        console.log(
+193:      // console.log(event.choices[0]?.delta)
+224:  console.log("\\n\\ntext:", result.text)
+225:  console.log("\\nusage:", result.usage)
+`,
+      })
+    })
+
+    it("should not block read bash even | exists", async () => {
+      const cmd = `grep -rn 'console.log' src/llm.mjs | head -20`
+      const config = ToolConfig.default()
+      const result = await execute_bash(cmd, config)
+      // assert.ok(result.success)
+      // assert.ok(result.output.includes("metacharacter"))
+      assert.deepStrictEqual(result.toObject(), {
+        output: `117:    // console.log("completion:", completion.choices[0])
+119:    // console.log("Answer:", completion.choices[0].message.content)
+132:        console.log(
+136:        console.log(
+193:      // console.log(event.choices[0]?.delta)
+224:  console.log("\\n\\ntext:", result.text)
+225:  console.log("\\nusage:", result.usage)
+`,
+        success: true,
+        tool: "bash",
+      })
     })
   })
 }
@@ -598,50 +718,68 @@ function test_execute_bash() {
 
 /**
  *
- * @type {(...params: SpawnParams) => Promise<{ stdout: string, stderr: string, code: number | null }>}
+ * @type {(command: SpawnParams[0], options?: SpawnParams[2]) => Promise<{ stdout: string, stderr: string, exitCode: number | undefined }>}
  */
-function spawnAsync(command, args = [], options = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, options)
-    let stdout = ""
-    let stderr = ""
+async function spawnAsync(command, options = {}) {
+  const [firstCmd, ...rest] = parsePipeCommands(command)
+  const optionsWithThrowOnError = { ...options, throwOnError: true }
 
-    // 收集标准输出
+  // use pipe to run the commands
+  const proc1 = exec(
     // @ts-expect-error
-    child.stdout.on("data", (data) => {
-      stdout += data.toString()
-    })
+    firstCmd?.tool_name,
+    firstCmd?.args,
+    optionsWithThrowOnError,
+  )
 
-    // 收集错误输出
-    // @ts-expect-error
-    child.stderr.on("data", (data) => {
-      stderr += data.toString()
-    })
+  let proc = proc1
+  for (const cmd of rest) {
+    proc = proc.pipe(
+      // @ts-expect-error
+      cmd.tool_name,
+      cmd.args,
+      optionsWithThrowOnError,
+    )
+  }
 
-    // 进程退出
-    child.on("close", (code) => {
-      if (code === 0) {
-        resolve({ stdout, stderr, code })
-      } else {
-        reject({ stdout, stderr, code })
-      }
-    })
+  // const proc1 = x("ls", ["-l"], { throwOnError : true })
+  const result = await proc
+  // console.log("1 result.stdout:", "|" + result.stdout + "|")
+  // result.stdout = result.stdout.trim()
+  // console.log("2 result.stdout:", "|" + result.stdout + "|")
 
-    // 进程出错（如命令不存在）
-    child.on("error", (err) => {
-      reject(err)
-    })
-  })
+  // console.log(result)
+  return result
+
+  // return new Promise((resolve, reject) => {
+  //   const child = spawn(command, args, options)
+  //   let stdout = ""
+  //   let stderr = ""
+
+  //   // 收集标准输出
+  //   // @ts-expect-error
+  //   child.stdout.on("data", (data) => {
+  //     stdout += data.toString()
+  //   })
+
+  //   // 收集错误输出
+  //   // @ts-expect-error
+  //   child.stderr.on("data", (data) => {
+  //     stderr += data.toString()
+  //   })
+
+  //   // 进程退出
+  //   child.on("close", (code) => {
+  //     if (code === 0) {
+  //       resolve({ stdout, stderr, code })
+  //     } else {
+  //       reject({ stdout, stderr, code })
+  //     }
+  //   })
+
+  //   // 进程出错（如命令不存在）
+  //   child.on("error", (err) => {
+  //     reject(err)
+  //   })
+  // })
 }
-
-// 使用示例
-// async function runCommand() {
-//   try {
-//     const result = await spawnAsync('ls', ['-la'], { cwd: './' });
-//     console.log('输出:', result.stdout);
-//   } catch (err) {
-//     console.error('错误:', err.stderr || err.message);
-//   }
-// }
-
-// runCommand();

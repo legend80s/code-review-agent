@@ -20,6 +20,8 @@
     "@types/node": "^26.1.0"
   },
   "dependencies": {
-    "openai": "^6.47.0"
+    "args-tokenizer": "^0.3.0",
+    "openai": "^6.47.0",
+    "tinyexec": "^1.2.4"
   }
 }
