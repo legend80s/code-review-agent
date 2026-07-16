@@ -401,7 +401,7 @@ async function review_file_with_followup(
           const skill = tools.find_skill(skill_name)
           if (skill) {
             info({ skill: skill.name }, "Agent: running skill analysis")
-            let skill_prompt =
+            const skill_prompt =
               "Analyze this code:\n\n```diff\n" + file.diff + "\n```"
 
             const [err, result] = await with_retry(retry_config, () => {
