@@ -153,38 +153,6 @@ async function spawnAsync(command, options = {}) {
   const result = await proc
 
   return result
-
-  // return new Promise((resolve, reject) => {
-  //   const child = spawn(command, args, options)
-  //   let stdout = ""
-  //   let stderr = ""
-
-  //   // 收集标准输出
-  //   // @ts-expect-error
-  //   child.stdout.on("data", (data) => {
-  //     stdout += data.toString()
-  //   })
-
-  //   // 收集错误输出
-  //   // @ts-expect-error
-  //   child.stderr.on("data", (data) => {
-  //     stderr += data.toString()
-  //   })
-
-  //   // 进程退出
-  //   child.on("close", (code) => {
-  //     if (code === 0) {
-  //       resolve({ stdout, stderr, code })
-  //     } else {
-  //       reject({ stdout, stderr, code })
-  //     }
-  //   })
-
-  //   // 进程出错（如命令不存在）
-  //   child.on("error", (err) => {
-  //     reject(err)
-  //   })
-  // })
 }
 
 /**
@@ -205,5 +173,42 @@ And both the two package is zero dependencies and lightweight comparing to `exec
 
 ### 3. Rust Pattern in JavaScript
 
-- In-source code testing
-- Rust pattern helpers in JavaScript src/utils/rust-patterns/
+#### Original and Innovative In-Source code testing in JavaScript
+
+> Writing tests directly in your source code — a fresh take on developer workflow.
+
+```js
+async function execute_bash(command, config) { ... }
+
+if (import.meta.main) {
+  test_execute_bash()
+}
+
+function test_execute_bash() {
+  describe("execute_bash", () => {
+    // #[tokio::test]
+    it("test_bash_echo", async () => {
+      const config = ToolConfig.default()
+      const result = await execute_bash("echo hello", config)
+
+      assert.ok(result.success)
+      assert.ok(result.output.includes("hello"))
+    })
+
+    // #[tokio::test]
+    it("test_bash_blocked", async () => {
+      const config = ToolConfig.default()
+      const result = await execute_bash("rm -rf /tmp/test", config)
+
+      assert.ok(!result.success)
+      assert.ok(result.output.includes("not allowed"))
+    })
+  })
+}
+```
+
+Interested and want to read more? Refer to `src/tools.mjs`
+
+#### Rust pattern helpers in JavaScript
+
+Refer to `src/utils/rust-patterns/`
