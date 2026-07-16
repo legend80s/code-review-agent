@@ -34,7 +34,7 @@ The tools are split into two categories: `readonly` and `writable`.
 
 For Safety only readonly bash tools like `cat` and `grep` are allowed.
 
-#### Read-only bash tools
+#### 2.1 Read-only bash tools
 
 ```js
 // ---------------------------------------------------------------------------
@@ -52,7 +52,7 @@ const ALLOWED_COMMANDS = [
 ];
 ```
 
-#### Writable or side-effecting bash tools
+#### 2.2 Writable or side-effecting bash tools
 
 ```js
 /// Commands that are explicitly forbidden.
@@ -65,7 +65,7 @@ const BLOCKED_COMMANDS = [
 ];
 ```
 
-#### Shell meta characters
+#### 2.3 Shell meta characters
 
 And Shell meta characters that indicate command chaining or injection.
 
@@ -87,7 +87,123 @@ For instance, `grep -rn 'console.log' src/llm.mjs | head -20` is rejected in the
 
 This is because both `grep` and `head` are read-only operations. More importantly, pipe chains are a frequent pattern in LLM-generated responses.
 
-### 3. Rust pattern in js
+#### 2.4 Execute command using `tinyexec` and `args-tokenizer`
+
+> After a long journey, we've finally made it to running bash commands.
+
+We parse the command into program + args using `args-tokenizer` and execute using `tinyexec`.
+
+##### Why `args-tokenizer`?
+
+`command.trim().split(/\s+/)` works for simple cases, but breaks once you need quotes or spaces in arguments (Refer to test case in src/tools.mjs).
+
+> Use `args-tokenizer` to split command string into `[command, ...args]`.
+
+```js
+import { tokenizeArgs } from "args-tokenizer"
+
+/**
+ * `command.trim().split(/\s+/)` is not good enough because it doesn't handle quotes and space in arg properly.
+ * @param {string} command
+ * @returns {{ tool_name: string | undefined, args: string[]}}
+ */
+function parse_command_and_args(command) {
+  const [cmd, ...args] = tokenizeArgs(command)
+
+  return { tool_name: cmd, args }
+}
+```
+
+##### Why `tinyexec`?
+
+> `tinyexec` is a tiny, fast, and easy-to-use Node.js child process library.
+
+In the first version, I used native `child_process.spawn`, but the code became more cumbersome and complex when piping commands (`|`) were introduced.
+
+```js
+
+/** @typedef {Parameters<typeof spawn>} SpawnParams */
+
+/**
+ *
+ * @type {(command: SpawnParams[0], options?: SpawnParams[2]) => Promise<{ stdout: string, stderr: string, exitCode: number | undefined }>}
+ */
+async function spawnAsync(command, options = {}) {
+  const [firstCmd, ...rest] = parsePipeCommands(command)
+  const optionsWithThrowOnError = { ...options, throwOnError: true }
+
+  // use pipe to run the commands
+  const proc1 = exec(
+    // @ts-expect-error
+    firstCmd?.tool_name,
+    firstCmd?.args,
+    optionsWithThrowOnError,
+  )
+
+  let proc = proc1
+  for (const cmd of rest) {
+    proc = proc.pipe(
+      // @ts-expect-error
+      cmd.tool_name,
+      cmd.args,
+      optionsWithThrowOnError,
+    )
+  }
+
+  const result = await proc
+
+  return result
+
+  // return new Promise((resolve, reject) => {
+  //   const child = spawn(command, args, options)
+  //   let stdout = ""
+  //   let stderr = ""
+
+  //   // 收集标准输出
+  //   // @ts-expect-error
+  //   child.stdout.on("data", (data) => {
+  //     stdout += data.toString()
+  //   })
+
+  //   // 收集错误输出
+  //   // @ts-expect-error
+  //   child.stderr.on("data", (data) => {
+  //     stderr += data.toString()
+  //   })
+
+  //   // 进程退出
+  //   child.on("close", (code) => {
+  //     if (code === 0) {
+  //       resolve({ stdout, stderr, code })
+  //     } else {
+  //       reject({ stdout, stderr, code })
+  //     }
+  //   })
+
+  //   // 进程出错（如命令不存在）
+  //   child.on("error", (err) => {
+  //     reject(err)
+  //   })
+  // })
+}
+
+/**
+ *
+ * @param {string} command
+ * @returns {{ tool_name: string | undefined, args: string[]}[]}
+ */
+function parsePipeCommands(command) {
+  const cmds = command.split(/\s*\|\s*/)
+
+  return cmds.map((cmd) => {
+    return parse_command_and_args(cmd)
+  })
+}
+```
+
+And both the two package is zero dependencies and lightweight comparing to `execa` or `nano-spawn`.
+
+### 3. Rust Pattern in JavaScript
 
 - In-source code testing
 - Rust pattern helpers in JavaScript src/utils/rust-patterns/
