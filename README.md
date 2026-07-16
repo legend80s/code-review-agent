@@ -1,14 +1,12 @@
 # Code Review Agent in JavaScript
 
-The project is a code review agent that uses the DeepSeek API to generate code reviews.
+> A code review agent that uses the DeepSeek API to generate code reviews.
 
 It takes a diff file as input and outputs in json/markdown format with the generated reviews.
 
-It is written in JavaScript and uses the Node.js runtime.
+It is written in JavaScript and uses the Node.js runtime. The original project is in Rust.
 
-The original project is written in Rust.
-
-Credit to https///github.com/ZhangHanDong/harness-engineering-from-cc-to-ai-coding which is a great starting point for this project.
+Credit to <https///github.com/ZhangHanDong/harness-engineering-from-cc-to-ai-coding> which is a great starting point for this project.
 
 ## Usage
 
@@ -20,7 +18,7 @@ node src/main.mjs --diff ./src.diff > review_log.md
 
 ## Features
 
-### Skills
+### 1. Skills
 
 > Built-in skills — specialized review lenses.
 
@@ -30,7 +28,7 @@ Inspired by Anthropic's connect-rust rust-code-reviewer (16 categories), organiz
 
 Skills: `security-audit` / `rust-deep` (Rust Ownership, Lifetimes & Concurrency) / `performance-review` (Performance) / `api-review` (API Design & Documentation) / `test-coverage` (Testing & Observability)
 
-### Bash tools
+### 2. Bash tools
 
 The tools are split into two categories: `readonly` and `writable`.
 
@@ -89,7 +87,7 @@ For instance, `grep -rn 'console.log' src/llm.mjs | head -20` is rejected in the
 
 This is because both `grep` and `head` are read-only operations. More importantly, pipe chains are a frequent pattern in LLM-generated responses.
 
-### Rust pattern in js
+### 3. Rust pattern in js
 
 - In-source code testing
 - Rust pattern helpers in JavaScript src/utils/rust-patterns/
